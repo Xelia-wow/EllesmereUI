@@ -24,6 +24,7 @@ local BAGS_DEFAULTS = {
         showUpgradeIndicator  = true,
         bagShowTrackRank      = false,
         itemlevelUseCustomColor = false,
+        itemlevelIgnoreTrackColor = false,
         bagHideEmptyCategories = true,
         bagSplitSetGearBySet  = false,
         bagShowSetGearName    = false,
