@@ -1036,11 +1036,31 @@ initFrame:SetScript("OnEvent", function(self)
                         EllesmereUIDB[key] = v
                         local refresh = EllesmereUI[refreshOf[key]]
                         if refresh then refresh() end
+                        -- Item Level gates the Color by Rarity cog below
+                        if key == "showItemLevel" then EllesmereUI:RefreshPage() end
                     end)
                 PP.Point(cbDD, "RIGHT", rgn, "RIGHT", -20, 0)
                 rgn._control = cbDD
                 rgn._lastInline = nil
                 EllesmereUI.RegisterWidgetRefresh(cbDDRefresh)
+
+                -- Inline cog: color-by-rarity override for the item level text
+                -- (gated by Item Level being checked in Item Details).
+                EllesmereUI.BuildInlineCog(rgn, {
+                    disabled = function() return EllesmereUIDB and EllesmereUIDB.showItemLevel == false end,
+                    disabledTooltip = "Item Level",
+                    title = "Item Level Options",
+                    rows = {
+                        { type="toggle", label="Color by Rarity",
+                          tooltip="Always color the item level by item rarity instead of its upgrade track.",
+                          get=function() return EllesmereUIDB and EllesmereUIDB.charSheetItemLevelIgnoreTrack or false end,
+                          set=function(v)
+                              if not EllesmereUIDB then EllesmereUIDB = {} end
+                              EllesmereUIDB.charSheetItemLevelIgnoreTrack = v
+                              if EllesmereUI._refreshCharSheetSlotLabels then EllesmereUI._refreshCharSheetSlotLabels() end
+                          end },
+                    },
+                })
             end
             AttachDisabledOverlay(coreRow1)
 
