@@ -2284,6 +2284,7 @@ do
         "showEnchants", "showPvpItemLevel", "charSheetSocketPanel", "charSheetSeasonPanel", "charSheetSeasonVault",
         "charSheetHideSlotFlyoutArrows",
         "charSheetIconZoom", "charSheetEnchantNames", "charSheetEnchantSize",
+        "charSheetItemLevelIgnoreTrack",
         "flyoutItemLevels", "flyoutItemStats", "charSheetItemStats",
         "flyoutItemStatsTertiary", "charSheetItemStatsTertiary", "charSheetSocketPanelStats",
         "showCharSheetDurability", "charSheetDurabilityLocation",
