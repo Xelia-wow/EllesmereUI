@@ -1567,14 +1567,16 @@ do
                 and EllesmereUIDB.charSheetItemLevelColor then
                 return EllesmereUIDB.charSheetItemLevelColor
             end
-            if upgradeText == nil then
-                upgradeText, upgradeColor = EllesmereUI.GetUpgradeTrack(itemLink)
+            if not (EllesmereUIDB and EllesmereUIDB.charSheetItemLevelIgnoreTrack) then
+                if upgradeText == nil then
+                    upgradeText, upgradeColor = EllesmereUI.GetUpgradeTrack(itemLink)
+                end
+                if upgradeText and upgradeText ~= "" and upgradeColor then
+                    return upgradeColor
+                end
+                local crafted = EllesmereUI.GetCraftedTrackColor(itemLink)
+                if crafted then return crafted end
             end
-            if upgradeText and upgradeText ~= "" and upgradeColor then
-                return upgradeColor
-            end
-            local crafted = EllesmereUI.GetCraftedTrackColor(itemLink)
-            if crafted then return crafted end
             if (not EllesmereUIDB or EllesmereUIDB.charSheetColorItemLevel ~= false) and itemQuality then
                 local r, g, b = C_Item.GetItemQualityColor(itemQuality)
                 return { r = r, g = g, b = b }

@@ -370,6 +370,13 @@ initFrame:SetScript("OnEvent", function(self)
                               db.profile.bagShowTrackRank = v
                               if _G.EUI_Bags and _G.EUI_Bags.RefreshInventory then _G.EUI_Bags:RefreshInventory() end
                           end },
+                        { type="toggle", label="Color by Rarity",
+                          tooltip="Always color the item level by item rarity instead of its upgrade track.",
+                          get=function() return db.profile.itemlevelIgnoreTrackColor or false end,
+                          set=function(v)
+                              db.profile.itemlevelIgnoreTrackColor = v
+                              if _G.EUI_Bags and _G.EUI_Bags.RefreshInventory then _G.EUI_Bags:RefreshInventory() end
+                          end },
                     },
                 })
             end
