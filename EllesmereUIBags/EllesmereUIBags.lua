@@ -3500,7 +3500,7 @@ local function RenderButton(btn, data, _, col, row, startX, currentY, _, interac
                     local trackColor = data._giTrackColor
                     if BP().itemlevelUseCustomColor and BP().itemlevelCustomColor then
                         r, g, b = BP().itemlevelCustomColor.r, BP().itemlevelCustomColor.g, BP().itemlevelCustomColor.b
-                    elseif trackColor then
+                    elseif not BP().itemlevelIgnoreTrackColor and trackColor then
                         r, g, b = trackColor.r, trackColor.g, trackColor.b
                     else
                         r, g, b = GetItemQualityColor(data._giQuality or 1)
