@@ -2364,13 +2364,19 @@ local function ApplyBmStaticSquare(f, health, ind, spellID)
     dd.tex:SetColorTexture(r, g, b, 1)
     local br, bg2, bb = BmColor(ind.indBorderColor, 0, 0, 0)
     BmUpdateBorder(dd, dd.borderHost, ind.indBorderSize or 1, br, bg2, bb, 1)
-    -- Sits at the floor of the BM layer stack (below even "Behind Borders",
-    -- the lowest real indicator tier -- see BM_FRAMELVL) so any When Present
-    -- tracker placed on top at its default settings covers it outright.
-    local unitButton = health:GetParent() or health
-    local lvl = unitButton:GetFrameLevel() + 1
+    -- Sits just above health's own frame level -- NOT the unit button's: f is
+    -- parented to health, which already sits several levels above the button
+    -- (fill/background textures live at health's level), so anchoring off the
+    -- button undershoots and draws the fill BEHIND the health bar (only the
+    -- border, on its own higher sub-frame, stayed visible -- exactly what
+    -- shipped here). One level above health clears its fill outright while
+    -- staying well below every real indicator tier (BM_FRAMELVL starts at
+    -- button level + 7), so a When Present tracker at its default settings
+    -- still covers it.
+    local lvl = health:GetFrameLevel() + 1
     if dd.bmLvl ~= lvl then
         f:SetFrameLevel(lvl)
+        dd.borderHost:SetFrameLevel(lvl + 1)
         dd.bmLvl = lvl
     end
 end
