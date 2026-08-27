@@ -2384,11 +2384,17 @@ local function UpdateBmStaticSquares(d, health, iscale, inds)
     if inds and health then
         for i = 1, #inds do
             local ind = inds[i]
-            if ind.enabled and ind.type == "square" and ind.showWhen == "missing" and ind.spells then
-                local count = #ind.spells
+            if ind.enabled and ind.type == "square" and ind.showWhen == "missing" then
+                -- No spell assigned (the common case: a purely decorative
+                -- marker, no per-spell color to key off) still renders ONE
+                -- square using ind.color -- count stays 1 so BmAnchorOneSlot's
+                -- growth math (which centers/offsets on count) behaves the
+                -- same as a real single-spell present-mode square.
+                local spellCount = ind.spells and #ind.spells or 0
+                local count = math.max(spellCount, 1)
                 local size = (ind.size or 12) * iscale
                 for k = 1, count do
-                    local spellID = ind.spells[k]
+                    local spellID = ind.spells and ind.spells[k]
                     local key = tostring(ind.id or "x") .. "_" .. k
                     wanted = wanted or {}
                     wanted[key] = true

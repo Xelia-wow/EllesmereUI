@@ -3689,6 +3689,25 @@ function ns.BM_BuildPage(pageName, parent, yOffset)
                         swatch:HookScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
                     end
                 end
+                -- Fallback: no per-spell/per-filter swatch above (nothing assigned
+                -- yet, or -- the common Show When: Missing case -- the square is used
+                -- as a plain decorative marker with no tracked spell at all). Always
+                -- offer at least one swatch so the color is never unreachable; binds
+                -- straight to ind.color, the same fallback every swatch above reads.
+                if not prev then
+                    local swatch = EllesmereUI.BuildColorSwatch(
+                        rgn, stacksRow:GetFrameLevel() + 3,
+                        function()
+                            local c = ind.color or DEFAULT_SQ
+                            return c.r, c.g, c.b, 1
+                        end,
+                        function(r, g, b)
+                            ind.color = { r=r, g=g, b=b }
+                            ReloadAndUpdate()
+                        end, false, 20)
+                    swatch:SetPoint("RIGHT", rgn, "RIGHT", -20, 0)
+                    prev = swatch
+                end
                 rgn._lastInline = prev
             end
 
