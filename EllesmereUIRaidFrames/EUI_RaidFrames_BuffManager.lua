@@ -3433,23 +3433,21 @@ function ns.BM_BuildPage(pageName, parent, yOffset)
             end
 
             -- Row 3 (square only): Show When Present/Missing. Icon and Bar
-            -- keep tracking presence only; Square can flip to render while
-            -- the aura is absent (see SquareMissing below for what that
-            -- disables in DISPLAY/THRESHOLD).
+            -- keep tracking presence only. Square can flip to Missing, which
+            -- on 12.1 renders as an always-shown static color square (see
+            -- UpdateBmStaticSquares in AuraContainers.lua) rather than a real
+            -- absence read -- the engine only ever populates aura containers
+            -- for auras that are actually present, and reading absence is
+            -- denied outright while auras are secret (combat). Users get the
+            -- same visual result by stacking a real When-Present tracker of
+            -- the same spell on top: it covers the square while the buff is
+            -- up and reveals it once the buff drops.
             if indType == "square" then
-                local showWhenRow = SettingsRow(
+                SettingsRow(
                     { type="dropdown", text="Show When", values=SQUARE_SHOW_WHEN_VALUES, order=SQUARE_SHOW_WHEN_ORDER,
                       getValue=function() return ind.showWhen or "present" end,
                       setValue=function(v) ind.showWhen = v; ReloadAndUpdate(); EllesmereUI:RefreshPage() end },
                     { type="label", text="" })
-                -- 12.1: aura-container slots are only ever populated for
-                -- present auras (see BuildBmSlots), so Missing is inert
-                -- there until the engine supports it. The panel rebuilds on
-                -- every setValue above, so this overlay tracks the chosen
-                -- value with no extra wiring.
-                if EllesmereUI.IS_121 and ind.showWhen == "missing" then
-                    PTRSlotOverlay("Show When: Missing", showWhenRow._leftRegion)
-                end
             end
 
             -----------------------------------------------------------
