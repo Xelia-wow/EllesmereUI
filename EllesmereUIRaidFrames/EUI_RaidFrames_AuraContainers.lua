@@ -2381,12 +2381,23 @@ local function ApplyBmStaticSquare(f, health, ind, spellID)
     end
 end
 
+-- A dead or disconnected unit has no real auras either way (present-mode
+-- trackers naturally render nothing there too), so a static square would
+-- otherwise sit uncovered and misleadingly "flag" a missing buff on a corpse
+-- or an offline player. d.rfcUnit is stamped by RFC_OnUnitAssigned/ReloadBm's
+-- caller, so this reads the SAME unit the rest of the button's state uses.
+local function BmStaticSquaresDead(d)
+    local unit = d.rfcUnit
+    return unit and (UnitIsDeadOrGhost(unit) or not UnitIsConnected(unit)) or false
+end
+
 -- Pooled per (indicator id, spell index) on d.bmStaticSquares so settings-panel
 -- edits (color/size/position) restyle the existing frames instead of recreating
 -- them every reload. Frames no longer wanted (indicator deleted/disabled/spec
 -- swap) are hidden and dropped from the pool.
 local function UpdateBmStaticSquares(d, health, iscale, inds)
     local wanted
+    local dead = BmStaticSquaresDead(d)
     if inds and health then
         for i = 1, #inds do
             local ind = inds[i]
@@ -2413,7 +2424,7 @@ local function UpdateBmStaticSquares(d, health, iscale, inds)
                     ApplyBmStaticSquare(f, health, ind, spellID)
                     BmAnchorOneSlot(f, { kind = "square", ind = ind, size = size, k = k, count = count },
                         health, health, iscale)
-                    f:Show()
+                    f:SetShown(not dead)
                 end
             end
         end
@@ -2425,6 +2436,19 @@ local function UpdateBmStaticSquares(d, health, iscale, inds)
                 d.bmStaticSquares[key] = nil
             end
         end
+    end
+end
+
+-- Cheap death/resurrect-edge refresh: just flips Shown on the already-built
+-- pool, no color/border/anchor recompute. Called from the UNIT_HEALTH path
+-- (ns._UpdateButtonHealth), which fires far more often than aura changes and
+-- is the only reliable signal for a death/rez transition (BM otherwise only
+-- updates on UNIT_AURA, which death/rez doesn't consistently trigger).
+function ns.RFC_RefreshBmStaticSquaresDeadState(d)
+    if not d.bmStaticSquares then return end
+    local dead = BmStaticSquaresDead(d)
+    for _, f in pairs(d.bmStaticSquares) do
+        f:SetShown(not dead)
     end
 end
 
