@@ -1408,6 +1408,23 @@ ns._UpdateButtonHealth = function(button, unit)
     -- Debuff Manager dead-corpse swap rides the same ownership: one field read
     -- for every button without a qualifying config.
     if d.dmDeadSwap then ns.DM_DeadEdge(d, unit) end
+
+    -- Buff Manager "Show When: Missing" static squares hide on a dead or
+    -- disconnected unit (see UpdateBmStaticSquares in AuraContainers.lua) --
+    -- they aren't aura-driven, so they need an explicit refresh exactly on
+    -- the death/resurrect transition. Gated on the button actually having
+    -- any (d.bmStaticSquares), and to the transition edge (d._bmWasDead
+    -- cache) so this doesn't add work to every UNIT_HEALTH tick, which fires
+    -- far more often than death/rez actually happens.
+    if d.bmStaticSquares then
+        local isDead = deadOrGhost or not connected
+        if d._bmWasDead ~= isDead then
+            d._bmWasDead = isDead
+            if ns.RFC_RefreshBmStaticSquaresDeadState then
+                ns.RFC_RefreshBmStaticSquaresDeadState(d)
+            end
+        end
+    end
 end
 
 -- Two-step max-health landing (max first, value after): one next-frame re-read
