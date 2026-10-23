@@ -446,17 +446,6 @@ ns.BM_INH_OFFSETS = {
     tanks = 3000000, dps = 3000000, healers = 3000000,
 }
 
-local trackedSpellIDs   = {}   -- set of all tracked spell IDs (including secret)
-local allActiveIndicators = {} -- flat list of all enabled indicators
--- True when the active spec has at least one Square indicator in "When
--- Missing" mode. UNIT_HEALTH is far too frequent an event to drive a full BM
--- rescan on every tick just to catch death/resurrect -- this lets the health
--- path (ns._UpdateButtonHealth) skip that extra work entirely for everyone
--- who isn't using the feature.
-local anyMissingSquares_BM = false
-
--- Simple Setup: the active spec's FULL whitelist (every non-hidden spell) regardless of indicators; its own set so the grid and custom indicators never share tracking state.
-local simpleTrackedSpellIDs = {}
 -- Alternate aura spell IDs resolving to a primary tracked ID (Earth Shield applies 383648, indicators use 974; Ebon Might self-buff 395296 vs ally 395152). Resolved at scan time so saved indicators match with no migration.
 local PRIMARY_BY_ALT = {
     [383648] = 974,     -- Earth Shield
@@ -676,26 +665,6 @@ local function ClassFallbackSpecKey()
 end
 ns.BM_ClassFallbackSpecKey = ClassFallbackSpecKey
 
--- Spec key the SIMPLE grid tracks: the resolved spec, or with Show Own on All
--- Specs the class's first tracked spec.
-local function SimpleSpecKey()
-    if activeSpecKey_BM then return activeSpecKey_BM end
-    if not SimpleShowOwnAllSpecs() then return nil end
-    return ClassFallbackSpecKey()
-end
-ns.BM_SimpleSpecKey = SimpleSpecKey
-
--- Simple Setup whitelist for the container grid (rebuilt by RebuildLookup; read-only for consumers -- the engine copies candidate tables on set).
-function ns.BM_SimpleTrackedSpellIDs()
-    return simpleTrackedSpellIDs
-end
-
--- Whether the active spec has any Square-When-Missing indicator (see
--- anyMissingSquares_BM). Lets the health-tick path gate its extra
--- death/resurrect refresh to only the users who need it.
-function ns.BM_HasMissingSquares()
-    return anyMissingSquares_BM
-end
 local function CountSpecIndicators(db, specKey)
     local list = GetSpecIndicators(db, specKey)
     return #list
@@ -707,9 +676,6 @@ end
 --  writes).
 -------------------------------------------------------------------------------
 local function RebuildLookup(db)
-    wipe(trackedSpellIDs)
-    wipe(allActiveIndicators)
-    anyMissingSquares_BM = false
     if not db or not db.profile then return end
 
     -- Ensure defaults are populated for all specs (triggers on first load)
@@ -718,40 +684,6 @@ local function RebuildLookup(db)
     end
 
     DetectActiveSpecKey()
-    local loadKey = activeSpecKey_BM
-    local flaggedOnly = false
-    if not loadKey then
-        loadKey = ClassFallbackSpecKey()
-        flaggedOnly = true
-    end
-    if loadKey then
-        local specData = db.profile.bmIndicators[loadKey]
-        if specData and type(specData) == "table" then
-            for _, ind in ipairs(specData) do
-                if ind.enabled and ind.spells
-                   and (not flaggedOnly or ind.showOwnAllSpecs) then
-                    allActiveIndicators[#allActiveIndicators + 1] = ind
-                    if ind.type == "square" and ind.showWhen == "missing" then
-                        anyMissingSquares_BM = true
-                    end
-                    for _, sid in ipairs(ind.spells) do
-                        -- Borrow specs track only castable spells (others stay inert); Show Own on All Specs opts out.
-                        if (not activeBorrow_BM) or ind.showOwnAllSpecs
-                           or activeBorrow_BM.spells[sid] then
-                            trackedSpellIDs[sid] = true
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- Track alternate aura IDs whose primary is tracked, so the incremental scanner's early-out sees them (they resolve to the primary in the scan).
-    for alt, primary in pairs(PRIMARY_BY_ALT) do
-        if trackedSpellIDs[primary] then
-            trackedSpellIDs[alt] = true
-        end
-    end
 
     -- Sync nextIndicatorId to highest existing id
     for _, specData in pairs(db.profile.bmIndicators) do
@@ -4025,7 +3957,7 @@ function ns.BM_BuildPage(pageName, parent, yOffset)
                 -- straight to ind.color, the same fallback every swatch above reads.
                 if not prev then
                     local swatch = EllesmereUI.BuildColorSwatch(
-                        rgn, stacksRow:GetFrameLevel() + 3,
+                        rgn, extraRow:GetFrameLevel() + 3,
                         function()
                             local c = ind.color or DEFAULT_SQ
                             return c.r, c.g, c.b, 1
