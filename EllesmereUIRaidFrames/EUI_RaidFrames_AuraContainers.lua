@@ -1980,7 +1980,14 @@ local function BuildBmSlots(inds, d, health, iscale, styleBase)
                 spells[#spells + 1] = sid
             end
             local kind = ind.type or "icon"
-            if (kind == "icon" or kind == "square") and BmChainMode(ind) == "g" then
+            -- Square, When Missing renders as a static always-shown frame
+            -- (see UpdateBmStaticSquares) instead of an AK aura-driven slot:
+            -- the secure container only ever populates for auras that are
+            -- actually present, so a "missing" slot would never show anything.
+            local isStaticSquare = kind == "square" and ind.showWhen == "missing"
+            if isStaticSquare then
+                -- handled entirely by UpdateBmStaticSquares
+            elseif (kind == "icon" or kind == "square") and BmChainMode(ind) == "g" then
                 if #spells > 0 then
                     chains[#chains + 1] = { ind = ind, spells = spells, idx = i }
                 end
@@ -2600,6 +2607,126 @@ local function DispelSlotSpecs(button, health, d, s)
     return specs
 end
 
+-- Static "When Missing" squares are NOT driven by the secure aura-container
+-- widget: Blizzard only ever populates an AK slot for a spell that actually
+-- HAS an active aura, and enumerating absence during combat is denied
+-- outright (DenyTaintedAccessWhenAurasAreSecret -- see RFC_LegacyAuraGuard).
+-- So these render as plain always-shown frames instead: a flat color square
+-- the user places a real (When Present) icon/square tracker of the same
+-- spell on top of, so the tracker visually covers the square while the buff
+-- is up and reveals it once the buff drops -- no aura reads, no secrecy
+-- involved at all. Deliberately NOT built via BmSquareInit/BmApplySquare:
+-- those bind SetDurationCooldown/SetApplicationCount, methods the engine only
+-- mixes into its own secure aura slot buttons -- calling them on a plain
+-- CreateFrame() errors. A static square has no duration/stacks to drive
+-- anyway, so it gets its own minimal texture+border init instead.
+local function CreateBmStaticSquare(health)
+    local f = CreateFrame("Frame", nil, health)
+    f:EnableMouse(false)
+    local dd = {}
+    dd.tex = f:CreateTexture(nil, "ARTWORK")
+    dd.tex:SetAllPoints(f)
+    dd.borderHost = CreateFrame("Frame", nil, f)
+    dd.borderHost:SetAllPoints(f)
+    dd.borderHost:SetFrameLevel(f:GetFrameLevel() + 1)
+    f._bmStaticDD = dd
+    return f
+end
+
+local function ApplyBmStaticSquare(f, health, ind, spellID)
+    local dd = f._bmStaticDD
+    local r, g, b = BmColor(BmSquareColor(ind, spellID), 12 / 255, 210 / 255, 157 / 255)
+    dd.tex:SetColorTexture(r, g, b, 1)
+    local br, bg2, bb = BmColor(ind.indBorderColor, 0, 0, 0)
+    BmUpdateBorder(dd, dd.borderHost, ind.indBorderSize or 1, br, bg2, bb, 1)
+    -- Sits just above health's own frame level -- NOT the unit button's: f is
+    -- parented to health, which already sits several levels above the button
+    -- (fill/background textures live at health's level), so anchoring off the
+    -- button undershoots and draws the fill BEHIND the health bar (only the
+    -- border, on its own higher sub-frame, stayed visible -- exactly what
+    -- shipped here). One level above health clears its fill outright while
+    -- staying well below every real indicator tier (BM_FRAMELVL starts at
+    -- button level + 7), so a When Present tracker at its default settings
+    -- still covers it.
+    local lvl = health:GetFrameLevel() + 1
+    if dd.bmLvl ~= lvl then
+        f:SetFrameLevel(lvl)
+        dd.borderHost:SetFrameLevel(lvl + 1)
+        dd.bmLvl = lvl
+    end
+end
+
+-- A dead or disconnected unit has no real auras either way (present-mode
+-- trackers naturally render nothing there too), so a static square would
+-- otherwise sit uncovered and misleadingly "flag" a missing buff on a corpse
+-- or an offline player. d.rfcUnit is stamped by RFC_OnUnitAssigned/ReloadBm's
+-- caller, so this reads the SAME unit the rest of the button's state uses.
+local function BmStaticSquaresDead(d)
+    local unit = d.rfcUnit
+    return unit and (UnitIsDeadOrGhost(unit) or not UnitIsConnected(unit)) or false
+end
+
+-- Pooled per (indicator id, spell index) on d.bmStaticSquares so settings-panel
+-- edits (color/size/position) restyle the existing frames instead of recreating
+-- them every reload. Frames no longer wanted (indicator deleted/disabled/spec
+-- swap) are hidden and dropped from the pool.
+local function UpdateBmStaticSquares(d, health, iscale, inds)
+    local wanted
+    local dead = BmStaticSquaresDead(d)
+    if inds and health then
+        for i = 1, #inds do
+            local ind = inds[i]
+            if ind.enabled and ind.type == "square" and ind.showWhen == "missing" then
+                -- No spell assigned (the common case: a purely decorative
+                -- marker, no per-spell color to key off) still renders ONE
+                -- square using ind.color -- count stays 1 so BmAnchorOneSlot's
+                -- growth math (which centers/offsets on count) behaves the
+                -- same as a real single-spell present-mode square.
+                local spellCount = ind.spells and #ind.spells or 0
+                local count = math.max(spellCount, 1)
+                local size = (ind.size or 12) * iscale
+                for k = 1, count do
+                    local spellID = ind.spells and ind.spells[k]
+                    local key = tostring(ind.id or "x") .. "_" .. k
+                    wanted = wanted or {}
+                    wanted[key] = true
+                    local f = d.bmStaticSquares and d.bmStaticSquares[key]
+                    if not f then
+                        f = CreateBmStaticSquare(health)
+                        d.bmStaticSquares = d.bmStaticSquares or {}
+                        d.bmStaticSquares[key] = f
+                    end
+                    ApplyBmStaticSquare(f, health, ind, spellID)
+                    BmAnchorOneSlot(f, { kind = "square", ind = ind, size = size, k = k, count = count },
+                        health, health, iscale)
+                    f:SetShown(not dead)
+                end
+            end
+        end
+    end
+    if d.bmStaticSquares then
+        for key, f in pairs(d.bmStaticSquares) do
+            if not (wanted and wanted[key]) then
+                f:Hide()
+                d.bmStaticSquares[key] = nil
+            end
+        end
+    end
+end
+
+-- Cheap death/resurrect-edge refresh: just flips Shown on the already-built
+-- pool, no color/border/anchor recompute. Called from the UNIT_HEALTH path
+-- (ns._UpdateButtonHealth), which fires far more often than aura changes and
+-- is the only reliable signal for a death/rez transition (BM otherwise only
+-- updates on UNIT_AURA, which death/rez doesn't consistently trigger).
+function ns.RFC_RefreshBmStaticSquaresDeadState(d)
+    if not d.bmStaticSquares then return end
+    local dead = BmStaticSquaresDead(d)
+    for _, f in pairs(d.bmStaticSquares) do
+        f:SetShown(not dead)
+    end
+end
+
 local function CreateBmContainer(button, health, d, unit)
     local inds, specKey, mode = BmIndicators(d)
     -- Party Frames kit: every buff icon joins one run right of the frame.
@@ -2609,6 +2736,7 @@ local function CreateBmContainer(button, health, d, unit)
     if not inds then
         d.rfcBmSig = sig
         BmParkUnbound(d, nil) -- custom-side chain pool parks
+        UpdateBmStaticSquares(d, health, BmScaleFor(d), nil)
         return
     end
 
@@ -2685,6 +2813,7 @@ local function CreateBmContainer(button, health, d, unit)
     -- container), driven by the deferred pool reload.
     d.rfcBmChainsPending = pendingChains or nil
     AnchorBmSlots(d, health, iscale)
+    UpdateBmStaticSquares(d, health, iscale, inds)
     d.rfcBmGeo = BmGeoFP(meta, iscale, ProxyFor(d))
 
     -- Prime the fingerprint caches with what was just built, so the next
@@ -2860,6 +2989,10 @@ local function ReloadBm(button, d, s, cls)
     end
 
     BmRebindPendingChains(button, d, cls)
+
+    -- Static squares aren't AK slots (see UpdateBmStaticSquares), so this runs
+    -- unconditionally rather than gating on d.rfcBm/d.rfcBmChain like the pass below.
+    UpdateBmStaticSquares(d, d.rfcHealth, cls.iscale, cls.inds)
 
     if (d.rfcBm or d.rfcBmChain) and cls.inds then
         if not cls.stylesChecked then
